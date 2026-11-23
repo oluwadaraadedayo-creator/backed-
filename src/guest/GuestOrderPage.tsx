@@ -12,7 +12,7 @@ const size = (b?: number) => (b ? `${(b / 1048576).toFixed(1)} MB` : '')
 function Shell({ children }: { children: ReactNode }) {
   return (
     <div className="flex min-h-screen items-center justify-center bg-[#F3F4F8] p-4 text-[#141A3C]">
-      <div className="w-full max-w-md rounded-2xl border border-[#D8DBEA] bg-white p-6 text-[#141A3C]">{children}</div>
+      <div className="w-full max-w-md rounded-none border border-[#D8DBEA] bg-white p-6 text-[#141A3C]">{children}</div>
     </div>
   )
 }
@@ -89,11 +89,11 @@ export default function GuestOrderPage() {
       <p className="mt-1 text-sm text-[#5B6180]">Enter the email you used and your order reference. We send a fresh link.</p>
       <label htmlFor="fe" className="mt-4 block text-sm font-medium">Email</label>
       <input id="fe" type="email" value={fe} onChange={(e) => setFe(e.target.value)}
-        className="mt-1.5 w-full rounded-lg border border-[#D8DBEA] bg-white px-3 py-3 text-base text-[#141A3C] outline-none focus:border-[#2B3BFF]" />
+        className="mt-1.5 w-full rounded-md border border-[#D8DBEA] bg-white px-3 py-3 text-base text-[#141A3C] outline-none focus:border-[#2B3BFF]" />
       <label htmlFor="fr" className="mt-4 block text-sm font-medium">Order reference (starts with bkd_)</label>
       <input id="fr" value={fr} onChange={(e) => setFr(e.target.value)}
-        className="mt-1.5 w-full rounded-lg border border-[#D8DBEA] bg-white px-3 py-3 text-base text-[#141A3C] outline-none focus:border-[#2B3BFF]" />
-      <button type="submit" disabled={busy} className="mt-4 w-full rounded-lg bg-[#2B3BFF] px-4 py-3 font-semibold text-white disabled:opacity-50">Send me a new link</button>
+        className="mt-1.5 w-full rounded-md border border-[#D8DBEA] bg-white px-3 py-3 text-base text-[#141A3C] outline-none focus:border-[#2B3BFF]" />
+      <button type="submit" disabled={busy} className="mt-4 w-full rounded-md bg-[#2B3BFF] px-4 py-3 font-semibold text-white disabled:opacity-50">Send me a new link</button>
       {sent && <p className="mt-3 text-sm text-[#5B6180]" role="status">If the details match, a new link is on its way to your email.</p>}
     </form>
   )
@@ -105,7 +105,7 @@ export default function GuestOrderPage() {
     return <Shell><h1 className="text-xl font-semibold">Still confirming your payment</h1><p className="mt-2 text-sm text-[#5B6180]">Banks can be slow. You can close this page. We will email your download link the moment payment is confirmed, and you will not be charged twice.</p></Shell>
   }
   if (phase === 'failed') {
-    return <Shell><h1 className="text-xl font-semibold">Payment not confirmed</h1><p className="mt-2 text-sm text-[#5B6180]">{msg}</p><a href="/" className="mt-4 inline-block rounded-lg bg-[#2B3BFF] px-4 py-3 font-semibold text-white">Back to the store</a>{findForm}</Shell>
+    return <Shell><h1 className="text-xl font-semibold">Payment not confirmed</h1><p className="mt-2 text-sm text-[#5B6180]">{msg}</p><a href="/" className="mt-4 inline-block rounded-md bg-[#2B3BFF] px-4 py-3 font-semibold text-white">Back to the store</a>{findForm}</Shell>
   }
   if (phase === 'find') {
     return <Shell><a href="/" className="text-sm text-[#5B6180] underline">Back to the store</a>{findForm}</Shell>
@@ -118,15 +118,15 @@ export default function GuestOrderPage() {
 
       {files.length === 0 ? (
         <button onClick={download} disabled={busy || left === 0}
-          className="mt-5 w-full rounded-lg bg-[#2B3BFF] px-4 py-3 font-semibold text-white disabled:opacity-50">
+          className="mt-5 w-full rounded-md bg-[#2B3BFF] px-4 py-3 font-semibold text-white disabled:opacity-50">
           {busy ? 'Preparing...' : 'Get my files'}
         </button>
       ) : (
         <ul className="mt-5 space-y-2">
           {files.map((f) => (
-            <li key={f.id} className="flex items-center justify-between gap-3 rounded-lg border border-[#D8DBEA] p-3">
+            <li key={f.id} className="flex items-center justify-between gap-3 rounded-md border border-[#D8DBEA] p-3">
               <span className="min-w-0 truncate text-sm">{f.title} <span className="text-[#5B6180]">{size(f.sizeBytes)}</span></span>
-              <a href={f.url} download={f.filename} className="shrink-0 rounded-lg bg-[#2B3BFF] px-3 py-2 text-sm font-semibold text-white">Download</a>
+              <a href={f.url} download={f.filename} className="shrink-0 rounded-md bg-[#2B3BFF] px-3 py-2 text-sm font-semibold text-white">Download</a>
             </li>
           ))}
         </ul>
