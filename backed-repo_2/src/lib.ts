@@ -1,0 +1,100 @@
+import { asset } from './asset'
+import type { Session } from '@supabase/supabase-js'
+import { supabase } from './supabase'
+
+export type Release = {
+  id: string; title: string; artist: string; artistId: string; type: string; price: number; image: string
+  description: string; tracks: string[]; tag?: string; benefits?: string[]; date: string; plays?: string; published?: boolean
+  pricingMode?: 'fixed' | 'pay_what_you_want'; minPrice?: number; currency?: string; category?: string; categoryLabel?: string; fulfillment?: string
+}
+export type Category = { slug: string; group_name: 'music' | 'fashion' | 'others'; label: string; fulfillment: 'digital' | 'physical'; enabled: boolean; sort: number }
+export type Maker = { id: string; displayName: string; bio: string | null; avatarUrl: string | null; coverImage: string | null; categories: string[]; followers: number; releases: number }
+export type DownloadFile = { id: string; title: string; position: number; sizeBytes: number; filename: string; url: string; mime?: string }
+export type Profile = { id: string; display_name: string; role: 'fan' | 'artist' | 'admin'; verified_artist: boolean }
+export type CampaignProgress = {
+  id: string; title: string; productId: string; goalUnits: number; status: string
+  confirmedUnits: number; pendingUnits: number; plaques: { name: string; kind: string; tierUnits: number; awardedAt: string }[]
+}
+
+export const MIN_PWYW_NAIRA = 1000
+export const API = (import.meta.env.VITE_API_URL as string | undefined)?.replace(/\/+$/, '')
+export const money = (n: number, currency: string = 'NGN') => new Intl.NumberFormat(currency === 'USD' ? 'en-US' : 'en-NG', { style: 'currency', currency, maximumFractionDigits: currency === 'USD' ? 2 : 0 }).format(n)
+export const CURRENCY_SYMBOL: Record<string, string> = { NGN: '₦', USD: '$' }
+export const MIN_PWYW: Record<string, number> = { NGN: 1000, USD: 2 }
+export const MAX_ORDER: Record<string, number> = { NGN: 1000000, USD: 2000 }
+// What kind of file this is, so the right player is shown.
+export const mediaKind = (mime?: string, filename?: string): 'audio' | 'video' | 'image' | 'document' => {
+  const m = (mime || '').toLowerCase(); const ext = (filename || '').split('.').pop()?.toLowerCase() || ''
+  if (m.startsWith('video/') || ['mp4', 'm4v', 'mov', 'webm'].includes(ext)) return 'video'
+  if (m.startsWith('image/') || ['jpg', 'jpeg', 'png', 'webp'].includes(ext)) return 'image'
+  if (m === 'application/pdf' || ext === 'pdf') return 'document'
+  return 'audio'
+}
+
+export const PRODUCT_SELECT = 'id,title,description,product_type,artwork_path,price_minor,tracklist,benefits,published_at,status,pricing_mode,min_price_minor,currency,category,fulfillment,creator:profiles(id,display_name)'
+const TYPE_LABEL: Record<string, string> = { single: 'Single', ep: 'EP', album: 'Album', live_recording: 'Live recording', video: 'Film or video', bundle: 'Art pack or bundle' }
+export const TYPE_VALUE: Record<string, string> = Object.fromEntries(Object.entries(TYPE_LABEL).map(([k, v]) => [v, k]))
+
+export const CATEGORY_LABEL: Record<string, string> = { music_artist: 'Artist', music_producer: 'Producer', music_dj: 'DJ', fashion_merch: 'Merch', fashion_streetwear: 'Streetwear', fashion_footies: 'Footies', others_film: 'Film and video', others_digital_art: 'Digital art', others_crochet: 'Crochet', others_collectors: 'Collector items', others_art: 'Art' }
+export const formatBytes = (n: number) => n >= 1048576 ? `${(n / 1048576).toFixed(1)} MB` : `${Math.max(1, Math.round(n / 1024))} KB`
+
+export function mapProduct(p: any): Release {
+  const pwyw = p.pricing_mode === 'pay_what_you_want'
+  return {
+    id: p.id, title: p.title, artist: p.creator?.display_name ?? 'Unknown artist', artistId: p.creator?.id ?? '',
+    type: TYPE_LABEL[p.product_type] ?? 'Album', price: p.price_minor / 100, image: p.artwork_path || fallbackCover(String(p.id || p.title || '')),
+    description: p.description || '', tracks: Array.isArray(p.tracklist) ? p.tracklist : [],
+    benefits: Array.isArray(p.benefits) && p.benefits.length ? p.benefits : ['Digital release'],
+    date: (p.published_at || '').slice(0, 10), plays: '0', published: p.status === 'published',
+    pricingMode: pwyw ? 'pay_what_you_want' : 'fixed', currency: p.currency || 'NGN', minPrice: pwyw ? (p.min_price_minor ?? 100000) / 100 : undefined,
+    category: p.category, categoryLabel: CATEGORY_LABEL[p.category] ?? undefined, fulfillment: p.fulfillment
+  }
+}
+
+export const priceLabel = (r: Release) => r.pricingMode === 'pay_what_you_want' ? `From ${money(r.minPrice ?? r.price, r.currency)}` : money(r.price, r.currency)
+
+export async function accessToken(): Promise<string | null> {
+  if (!supabase) return null
+  const { data } = await supabase.auth.getSession()
+  return data.session?.access_token ?? null
+}
+
+export async function apiCall<T = any>(path: string, opts: { method?: string; body?: unknown; auth?: boolean } = {}): Promise<{ ok: boolean; status: number; data: T }> {
+  if (!API) return { ok: false, status: 0, data: { error: 'Payments are not connected yet.' } as any }
+  const headers: Record<string, string> = {}
+  if (opts.body !== undefined) headers['Content-Type'] = 'application/json'
+  if (opts.auth) {
+    const token = await accessToken()
+    if (!token) return { ok: false, status: 401, data: { error: 'Please sign in first.' } as any }
+    headers.Authorization = `Bearer ${token}`
+  }
+  const res = await fetch(`${API}${path}`, { method: opts.method || 'POST', headers, body: opts.body !== undefined ? JSON.stringify(opts.body) : undefined })
+  const data = await res.json().catch(() => ({}))
+  return { ok: res.ok, status: res.status, data }
+}
+
+export type { Session }
+
+// Category helpers. The categories table in the database is the source of truth; this list is only a fallback
+// so the homepage filters still render if that request fails.
+export const groupOf = (slug?: string): 'music' | 'fashion' | 'others' => slug?.startsWith('music_') ? 'music' : slug?.startsWith('fashion_') ? 'fashion' : 'others'
+export const CATEGORIES_FALLBACK: Category[] = [
+  { slug: 'music_artist', group_name: 'music', label: 'Artist', fulfillment: 'digital', enabled: true, sort: 1 },
+  { slug: 'music_producer', group_name: 'music', label: 'Producer', fulfillment: 'digital', enabled: false, sort: 2 },
+  { slug: 'music_dj', group_name: 'music', label: 'DJ', fulfillment: 'digital', enabled: true, sort: 3 },
+  { slug: 'fashion_merch', group_name: 'fashion', label: 'Merch', fulfillment: 'physical', enabled: false, sort: 4 },
+  { slug: 'fashion_streetwear', group_name: 'fashion', label: 'Streetwear', fulfillment: 'physical', enabled: false, sort: 5 },
+  { slug: 'fashion_footies', group_name: 'fashion', label: 'Footies', fulfillment: 'physical', enabled: false, sort: 6 },
+  { slug: 'others_film', group_name: 'others', label: 'Film and video', fulfillment: 'digital', enabled: true, sort: 10 },
+  { slug: 'others_digital_art', group_name: 'others', label: 'Digital art', fulfillment: 'digital', enabled: true, sort: 11 },
+  { slug: 'others_crochet', group_name: 'others', label: 'Crochet', fulfillment: 'physical', enabled: false, sort: 7 },
+  { slug: 'others_collectors', group_name: 'others', label: 'Collector items', fulfillment: 'physical', enabled: false, sort: 8 },
+  { slug: 'others_art', group_name: 'others', label: 'Art', fulfillment: 'physical', enabled: false, sort: 9 }
+]
+export const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
+
+const COVERS = ['c01','c02','c03','c04','c05','c06','c07','c08','c09','c10','c11','c12']
+export const fallbackCover = (seed: string) => {
+  let h = 0; for (let i = 0; i < seed.length; i++) h = (h * 31 + seed.charCodeAt(i)) >>> 0
+  return asset(`/images/covers/${COVERS[h % COVERS.length]}.svg`)
+}
